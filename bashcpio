@@ -1,0 +1,54 @@
+#!/bin/bash
+
+pkg=$1
+if [ "$pkg" = "" -o ! -e "$pkg" ]; then
+    echo "no package supplied" 1>&2
+    exit 1
+fi
+
+# get_chunk(skipbytes, chunklen, [savefile])
+get_chunk () {
+    skp=$1
+    siz=$2
+    file=$3
+    if [ "$3"x != 'x' ]; then
+        file=" of=$3 "
+    else
+        file=""
+    fi
+    echo -n `dd if="$pkg" count=$siz iseek=$skp $file bs=1 2>/dev/null`
+}
+
+magic=$(get_chunk 0 6)
+ino=$(get_chunk 6 8)
+mode=$(get_chunk 14 8)
+uid=$(get_chunk 22 8)
+gid=$(get_chunk 30 8)
+nlink=$(get_chunk 38 8)
+mtime=$(get_chunk 46 8)
+tempv=$(get_chunk 54 8)
+declare -i filesize=0x$(get_chunk 54 8)
+devmajor=$(get_chunk 62 8)
+devmajor=$(get_chunk 70 8)
+rdevminor=$(get_chunk 78 8)
+rdevminor=$(get_chunk 86 8)
+declare -i namesize=0x$(get_chunk 94 8)
+check=$(get_chunk 102 8)
+
+fname=$(get_chunk 110 $namesize)
+echo "filename: $fname"
+echo "namesize: $namesize"
+
+#header size = 13*8  + 6  "sb = start of body"
+declare -i sb=110
+#file name already including one null byte
+sb=$sb+$namesize
+#as many nulls as needed to be a multiple of 4
+sb=$sb+$sb%4
+
+dir=`dirname $fname`
+mkdir -p $dir
+get_chunk $sb $filesize $fname)
+exit
+
+
