@@ -8,6 +8,9 @@ fi
 
 #pointer to beginning of current file to be extracted
 current_base=0
+#some other globals 
+declare -i filesize
+declare -i namesize
 
 # get_chunk(skipbytes, chunklen, [savefile])
 #    return value in get_chunk_return or saved into savefile
@@ -59,28 +62,59 @@ save_file () {
     #TODO: set owner, mode (use mask?), mtime
 }
 
+# read header of current record using fixed offsets
+#   set a bunch of global variables
+read_header () {
+    # dont bother getting header fields we dont need
+    get_chunk 0   6; magic=$get_chunk_return
+    #get_chunk 6   8; ino=$get_chunk_return
+    get_chunk 14  8; mode=$get_chunk_return
+    get_chunk 22  8; uid=$get_chunk_return
+    get_chunk 30  8; gid=$get_chunk_return
+    #get_chunk 38  8; nlink=$get_chunk_return
+    get_chunk 46  8; mtime=$get_chunk_return
+    get_chunk 54  8; filesize=0x$get_chunk_return
+    #get_chunk 62  8; devmajor=$get_chunk_return
+    #get_chunk 70  8; devmajor=$get_chunk_return
+    #get_chunk 78  8; rdevminor=$get_chunk_return
+    #get_chunk 86  8; rdevminor=$get_chunk_return
+    get_chunk 94  8;  namesize=0x$get_chunk_return
+    #get_chunk 102 8; check=$get_chunk_return
+    get_chunk 110 $namesize; fname=$get_chunk_return
 
-get_chunk 0   6; magic=$get_chunk_return
-#get_chunk 6   8; ino=$get_chunk_return
-get_chunk 14  8; mode=$get_chunk_return
-get_chunk 22  8; uid=$get_chunk_return
-get_chunk 30  8; gid=$get_chunk_return
-#get_chunk 38  8; nlink=$get_chunk_return
-get_chunk 46  8; mtime=$get_chunk_return
-get_chunk 54  8; declare -i filesize=0x$get_chunk_return
-#get_chunk 62  8; devmajor=$get_chunk_return
-#get_chunk 70  8; devmajor=$get_chunk_return
-#get_chunk 78  8; rdevminor=$get_chunk_return
-#get_chunk 86  8; rdevminor=$get_chunk_return
-get_chunk 94  8; declare -i namesize=0x$get_chunk_return
-#get_chunk 102 8; check=$get_chunk_return
+    declare -i fileperm
+    fileperm=0x${mode:5}
+    printf "mode: %o fileperm: $fileperm\n" "$mode"
+    exit
+}
 
-get_chunk 110 $namesize; fname=$get_chunk_return
-#echo "filename: $fname"
-#echo "namesize: $namesize"
+check_magic () {
+    if [ $magic != "070701" ] && [ $magic != "070702" ] ; then
+        echo "Invalid header - not a cpio archive?"
+        exit 1
+    fi
+    return 0
+}
+
+###############################################################
+
+
+
+
+read_header
+
+check_magic
+if [ $? -ne 0 ]; then
+    echo "invalid header, exiting"
+    exit 1
+fi
+
 
 # is it linkcount or filesize that indicates hard links?  
 #  TODO handle either case
-save_file $namesize $fname $filesize
+
 exit
+
+#based on mode we need to extract a file, a fifo, a directory, etc.  Probably not support device files?
+save_file $namesize $fname $filesize
 
