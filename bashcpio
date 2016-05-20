@@ -6,9 +6,20 @@ if [ "$pkg" = "" -o ! -e "$pkg" ]; then
     exit 1
 fi
 
+#pointer to beginning of current file to be extracted
+current_base=0
+
 # get_chunk(skipbytes, chunklen, [savefile])
+#    return value in get_chunk_return or saved into savefile
+#    if savefile is specified
+#    note the use of the global current_base - points to the current file record
+#    so that this code can be used on any file in the archive
+get_chunk_return=""
 get_chunk () {
-    skp=$1
+    local skp
+    local siz
+    local file
+    declare -i skp=$1+$current_base
     siz=$2
     file=$3
     if [ "$3"x != 'x' ]; then
@@ -16,39 +27,60 @@ get_chunk () {
     else
         file=""
     fi
-    echo -n `dd if="$pkg" count=$siz iseek=$skp $file bs=1 2>/dev/null`
+    get_chunk_return=`dd if="$pkg" count=$siz skip=$skp $file bs=1 2>/dev/null`
 }
 
-magic=$(get_chunk 0 6)
-ino=$(get_chunk 6 8)
-mode=$(get_chunk 14 8)
-uid=$(get_chunk 22 8)
-gid=$(get_chunk 30 8)
-nlink=$(get_chunk 38 8)
-mtime=$(get_chunk 46 8)
-tempv=$(get_chunk 54 8)
-declare -i filesize=0x$(get_chunk 54 8)
-devmajor=$(get_chunk 62 8)
-devmajor=$(get_chunk 70 8)
-rdevminor=$(get_chunk 78 8)
-rdevminor=$(get_chunk 86 8)
-declare -i namesize=0x$(get_chunk 94 8)
-check=$(get_chunk 102 8)
+# save_file(namesize, fname, flength )
+#     saves the current file, sets perms, owners?
+save_file () {
+    local sb
+    local dir
+    local namesize
+    local fname
+    local flength
+    namesize=$1
+    fname=$2
+    flength=$3
 
-fname=$(get_chunk 110 $namesize)
-echo "filename: $fname"
-echo "namesize: $namesize"
+    # header size = 13*8  + 6 
+    #  + filenamesize (including 1 null byte)
+    declare -i sb=110+$namesize
+    #  + as many nulls as needed for length to be a multiple of 4
+    sb=$sb+$sb%4
+    #skipping sb bytes will get us to beginning of actual file contents
 
-#header size = 13*8  + 6  "sb = start of body"
-declare -i sb=110
-#file name already including one null byte
-sb=$sb+$namesize
-#as many nulls as needed to be a multiple of 4
-sb=$sb+$sb%4
+    # replace dirname with something stupid and complicated later using
+    #   only builtins... maybe
+    dir=`dirname $fname`
+    mkdir -p $dir
+    #TODO: chroot here maybe, or some hokey sanitization of path name
+    echo "Extracting: $fname"
+    get_chunk $sb $flength $fname
+    #TODO: set owner, mode (use mask?), mtime
+}
 
-dir=`dirname $fname`
-mkdir -p $dir
-get_chunk $sb $filesize $fname)
+
+get_chunk 0   6; magic=$get_chunk_return
+#get_chunk 6   8; ino=$get_chunk_return
+get_chunk 14  8; mode=$get_chunk_return
+get_chunk 22  8; uid=$get_chunk_return
+get_chunk 30  8; gid=$get_chunk_return
+#get_chunk 38  8; nlink=$get_chunk_return
+get_chunk 46  8; mtime=$get_chunk_return
+get_chunk 54  8; declare -i filesize=0x$get_chunk_return
+#get_chunk 62  8; devmajor=$get_chunk_return
+#get_chunk 70  8; devmajor=$get_chunk_return
+#get_chunk 78  8; rdevminor=$get_chunk_return
+#get_chunk 86  8; rdevminor=$get_chunk_return
+get_chunk 94  8; declare -i namesize=0x$get_chunk_return
+#get_chunk 102 8; check=$get_chunk_return
+
+get_chunk 110 $namesize; fname=$get_chunk_return
+#echo "filename: $fname"
+#echo "namesize: $namesize"
+
+# is it linkcount or filesize that indicates hard links?  
+#  TODO handle either case
+save_file $namesize $fname $filesize
 exit
-
 

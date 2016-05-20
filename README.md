@@ -47,7 +47,7 @@ shell script that does about 80% or more, in a less robust way.  This is
 what I'll be using
 
 *   This is terribly insecure - a malicious archive could write over anything
-that the user you run this as has write access to.
+that the user you run this as has write access to. Hm - chroot to this dir?
 
 *   Perms will be maintained, but not ownership?  since I'm going to be building
 single user chroots... hm well, tbd
