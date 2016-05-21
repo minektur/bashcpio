@@ -49,6 +49,7 @@ what I'll be using
 *   This is terribly insecure - a malicious archive could write over anything
 that the user you run this as has write access to. Hm - chroot to this dir?
 
-*   Perms will be maintained, but not ownership?  since I'm going to be building
-single user chroots... hm well, tbd
+* more on insecurity - a non-malicious archive presented by an attacker with local access and good timing might get a file overwritten or perms-changed. you should probably unpack in an area that only you have write-access to 
+
+*   Perms will be maintained, but not ownership?  since I'm going to be building single user chroots... hm well, tbd
 
