@@ -1,16 +1,21 @@
 #!/bin/bash
 
-pkg=$1
-if [ "$pkg" = "" -o ! -e "$pkg" ]; then
-    echo "no package supplied" 1>&2
-    exit 1
-fi
-
 #pointer to beginning of current file to be extracted
 current_base=0
-#some other globals 
+#some other (integer) globals 
 declare -i filesize
 declare -i namesize
+declare -i fileperm
+declare -i filetype
+
+cmd_line () {
+    pkg=$1
+    if [ "$pkg" = "" -o ! -e "$pkg" ]; then
+        echo "no package supplied" 1>&2
+        exit 1
+    fi
+}
+
 
 # get_chunk(skipbytes, chunklen, [savefile])
 #    return value in get_chunk_return or saved into savefile
@@ -33,9 +38,9 @@ get_chunk () {
     get_chunk_return=`dd if="$pkg" count=$siz skip=$skp $file bs=1 2>/dev/null`
 }
 
-# save_file(namesize, fname, flength )
+# extract_file(namesize, fname, flength )
 #     saves the current file, sets perms, owners?
-save_file () {
+extract_file () {
     local sb
     local dir
     local namesize
@@ -62,6 +67,15 @@ save_file () {
     #TODO: set owner, mode (use mask?), mtime
 }
 
+extract_dir () {
+
+	echo "would be nice if this were implemented"
+	#TODO
+	#mkdir -p $foo
+	#chmod $bar foo
+
+}
+
 # read header of current record using fixed offsets
 #   set a bunch of global variables
 read_header () {
@@ -82,12 +96,13 @@ read_header () {
     #get_chunk 102 8; check=$get_chunk_return
     get_chunk 110 $namesize; fname=$get_chunk_return
 
-    declare -i fileperm
-    fileperm=0x${mode:5}
-    printf "mode: %o fileperm: $fileperm\n" "$mode"
-    exit
+    #mask and convert to octal
+    fileperm=$(printf "%o" "0x${mode:5}")
+    #extract filetype section
+    filetype=0x${mode:0:5}
 }
 
+#verifies that we read a supported record type
 check_magic () {
     if [ $magic != "070701" ] && [ $magic != "070702" ] ; then
         echo "Invalid header - not a cpio archive?"
@@ -96,25 +111,34 @@ check_magic () {
     return 0
 }
 
-###############################################################
+# everything to extract a file out of a cpio archive
+#  as pointed at by $current_base
+get_one_file () {
+    read_header 
+    check_magic
+
+    # only handle files and directories leaving a bunch of types 
+    # that are just begging for implementation.  Their cries have
+    # fallen on deaf ears
+    # is it linkcount or filesize that indicates hard links?  
+
+    #check for last field and return 1
+
+    case $filetype in
+       4)
+            extract_dir ;;
+       8)
+            extract_file $namesize $fname $filesize ;;
+    esac
+    
+    #TODO update $current_base
+
+    return 0
+}
 
 
+cmd_line $1
 
-
-read_header
-
-check_magic
-if [ $? -ne 0 ]; then
-    echo "invalid header, exiting"
-    exit 1
-fi
-
-
-# is it linkcount or filesize that indicates hard links?  
-#  TODO handle either case
-
-exit
-
-#based on mode we need to extract a file, a fifo, a directory, etc.  Probably not support device files?
-save_file $namesize $fname $filesize
+#TODO make a loop on get_one_file stoping on non-0 return value
+get_one_file
 
