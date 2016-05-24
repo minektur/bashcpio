@@ -53,3 +53,4 @@ that the user you run this as has write access to. Hm - chroot to this dir?
 
 *   Perms will be maintained, but not ownership?  since I'm going to be building single user chroots... hm well, tbd
 
+* You can get a copy of rpm2cpio.sh (GPL'd) here: https://github.com/rpm-software-management/rpm/tree/master/scripts
