@@ -1,12 +1,13 @@
 #!/bin/bash
 
 #pointer to beginning of current file to be extracted
-current_base=0
+declare -i current_base=0
 #some other (integer) globals 
 declare -i filesize
 declare -i namesize
 declare -i fileperm
 declare -i filetype
+declare pkg
 
 cmd_line () {
     pkg=$1
@@ -22,7 +23,7 @@ cmd_line () {
 #    if savefile is specified
 #    note the use of the global current_base - points to the current file record
 #    so that this code can be used on any file in the archive
-get_chunk_return=""
+declare get_chunk_return=""
 get_chunk () {
     local skp
     local siz
@@ -35,7 +36,7 @@ get_chunk () {
     else
         file=""
     fi
-    get_chunk_return=`dd if="$pkg" count=$siz skip=$skp $file bs=1 2>/dev/null`
+    get_chunk_return=`dd if="$pkg" count=$siz skip=$skp $file ibs=1 obs=1024 2>/dev/null`
 }
 
 # extract_file(namesize, fname, flength )
@@ -50,19 +51,19 @@ extract_file () {
     fname=$2
     flength=$3
 
-    # header size = 13*8  + 6 
-    #  + filenamesize (including 1 null byte)
-    declare -i sb=110+$namesize
-    #  + as many nulls as needed for length to be a multiple of 4
-    sb=$sb+$sb%4
-    #skipping sb bytes will get us to beginning of actual file contents
+    #sb bytes (skipped) will now get us to beginning of file contents
+    # header size = 13*8  + 6  + filenamesize (including 1 null byte)
+    #  + null padding to make the whole thing be a multiple of 4
+    sb=$(( 110 + $namesize ))
+    sb=$(( $sb + (( 4 - ( $sb % 4 )) % 4 ) ))
 
-    # replace dirname with something stupid and complicated later using
-    #   only builtins... maybe
+
+    # TODO replace dirname with something stupid and complicated later
+    #   using only builtins... maybe
     dir=`dirname $fname`
     mkdir -p $dir
-    #TODO: chroot here maybe, or some hokey sanitization of path name
-    echo "Extracting: $fname"
+    #TODO: chroot here maybe, or some sanitization of path name
+    echo "x: $fname"
     get_chunk $sb $flength $fname
     #TODO: set owner, mode (use mask?), mtime
 }
@@ -104,8 +105,9 @@ read_header () {
 
 #verifies that we read a supported record type
 check_magic () {
-    if [ $magic != "070701" ] && [ $magic != "070702" ] ; then
+    if [ "$magic" != "070701" ] && [ "$magic" != "070702" ] ; then
         echo "Invalid header - not a cpio archive?"
+        echo $magic
         exit 1
     fi
     return 0
@@ -114,6 +116,8 @@ check_magic () {
 # everything to extract a file out of a cpio archive
 #  as pointed at by $current_base
 get_one_file () {
+    local sb
+
     read_header 
     check_magic
 
@@ -122,23 +126,42 @@ get_one_file () {
     # fallen on deaf ears
     # is it linkcount or filesize that indicates hard links?  
 
-    #check for last field and return 1
+    #TODO: check for last field and return 1
+
+    if  [ $fname = 'TRAILER!!!' ]; then
+        #end of archive
+        return 1
+    fi
 
     case $filetype in
-       4)
-            extract_dir ;;
        8)
             extract_file $namesize $fname $filesize ;;
+       4)
+            extract_dir ;;
     esac
     
-    #TODO update $current_base
+    #giant PITA getting this padding right.
+    #header + name + padding
+    sb=$(( 110 + $namesize ))
+    sb=$(( $sb + (( 4 - ( $sb % 4 )) % 4 ) ))
 
+    # + file payload + padding
+    sb=$(( $sb + $filesize ))
+    sb=$(( $sb + (( 4 - ( $sb % 4 )) % 4 ) ))
+  
+    current_base=$current_base+$sb
+    
     return 0
 }
 
 
+
+
 cmd_line $1
 
-#TODO make a loop on get_one_file stoping on non-0 return value
-get_one_file
+fin=0;
+until [ $fin = 1 ]; do
+    get_one_file
+    fin=$?
+done
 
