@@ -1,11 +1,12 @@
 # bashcpio
-An incomplete cpio extractor in bash (plus dd, mkdir -p, and dirname)
+An incomplete cpio extractor in bash.
 
+# external dependencies:  dd, mkdir, dirname, chown, chmod, date, touch
+ (could probably get rid of dirname, but the rest have no pure-bash equivalent)
 
-The goal of this project is to implement enough of cpio extraction that
-when combined with the rpm2cpio.sh bash script floating around, when combined 
-with only bash and a very few external, hopefully universal shell utils, one
-could successfully extract binary rpms as seen in centos releases.
+The goal of this project is to implement enough of cpio extraction that 
+when combined with the rpm2cpio.sh bash script floating around could 
+successfully extract binary centos rpms.
 
 It may have other uses, but this is all I'll be testing on and really it's
 probably better just to get either a cpio binary, or perhaps a libarchive 
@@ -24,11 +25,9 @@ format (with or without "CRC") as defined here:
 https://people.freebsd.org/~kientzle/libarchive/man/cpio.5.txt
 
 
-
-
-Notes:  In the long run, I could probably do without dirname, but something
-that handles chunks of a binary file (dd) and mkdir (-p) dont seem to be 
-implementable with only bash builtins.
+Notes:  Something that handles chunks of a binary file (dd) and mkdir (-p) dont seem to be 
+implementable with only bash builtins. Similarly, modifying file attributes
+has no real equivalent, though I might swing some perms with umask manipulation.
 
 "real" end goal here?  add a centos target to "crouton" for chromebooks,
 of which this is a tiny, but necessary piece.
@@ -49,8 +48,8 @@ what I'll be using
 *   This is terribly insecure - a malicious archive could write over anything
 that the user you run this as has write access to. Hm - chroot to this dir?
 
-* more on insecurity - a non-malicious archive presented by an attacker with local access and good timing might get a file overwritten or perms-changed. you should probably unpack in an area that only you have write-access to 
-
-*   Perms will be maintained, but not ownership?  since I'm going to be building single user chroots... hm well, tbd
+*   More on insecurity - a non-malicious archive presented by an attacker with 
+local access and good timing might get a file overwritten or perms-changed. 
+You should probably unpack in an area that only you have write-access to 
 
 * You can get a copy of rpm2cpio.sh (GPL'd) here: https://github.com/rpm-software-management/rpm/tree/master/scripts
