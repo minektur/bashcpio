@@ -90,6 +90,7 @@ extract_dir () {
 read_header () {
     # dont bother getting header fields we dont need
     get_chunk 0   6; magic=$get_chunk_return
+    check_magic
     #get_chunk 6   8; ino=$get_chunk_return
     get_chunk 14  8; mode=$get_chunk_return
     get_chunk 22  8; uid=$get_chunk_return
@@ -127,7 +128,6 @@ get_one_file () {
     local sb
 
     read_header 
-    check_magic
 
     # only handle files and directories leaving a bunch of types 
     # that are just begging for implementation.  Their cries have
