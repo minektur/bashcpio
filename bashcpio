@@ -7,6 +7,7 @@ declare -i filesize
 declare -i namesize
 declare -i fileperm
 declare -i filetype
+declare -i mtime
 declare pkg
 
 cmd_line () {
@@ -36,7 +37,7 @@ get_chunk () {
     else
         file=""
     fi
-    get_chunk_return=`dd if="$pkg" count=$siz skip=$skp $file ibs=1 obs=1024 2>/dev/null`
+    get_chunk_return=`dd if="$pkg" count=$siz skip=$skp $file iflag=count_bytes,skip_bytes 2>/dev/null`
 }
 
 # extract_file(namesize, fname, flength )
@@ -47,6 +48,7 @@ extract_file () {
     local namesize
     local fname
     local flength
+    local ds
     namesize=$1
     fname=$2
     flength=$3
@@ -61,20 +63,26 @@ extract_file () {
     # TODO replace dirname with something stupid and complicated later
     #   using only builtins... maybe
     dir=`dirname $fname`
+    #TODO: umask on dir creation?
     mkdir -p $dir
-    #TODO: chroot here maybe, or some sanitization of path name
     echo "x: $fname"
+    #TODO: chroot here maybe, or some sanitization of path name 
+    # remove leading slashes and dots until first non-slash/dot?
     get_chunk $sb $flength $fname
-    #TODO: set owner, mode (use mask?), mtime
+    #only works if running as root - silently ignore errors
+    chown $uid:$gid $fname > /dev/null 2>&1
+    chmod $fileperm $fname 
+    
+    ds=$( date -d @$mtime +%Y%m%d%H%M.%S )
+    touch -c -m -t $ds $fname
 }
 
 extract_dir () {
-
-	echo "would be nice if this were implemented"
-	#TODO
-	#mkdir -p $foo
-	#chmod $bar foo
-
+    dirname=$1
+    mkdir -p $dirname
+    #only works if running as root - silently ignore errors
+    chown $uid:$gid $dirname > /dev/null 2>&1
+    chmod $fileperm $dirname
 }
 
 # read header of current record using fixed offsets
@@ -87,7 +95,7 @@ read_header () {
     get_chunk 22  8; uid=$get_chunk_return
     get_chunk 30  8; gid=$get_chunk_return
     #get_chunk 38  8; nlink=$get_chunk_return
-    get_chunk 46  8; mtime=$get_chunk_return
+    get_chunk 46  8; mtime=0x$get_chunk_return
     get_chunk 54  8; filesize=0x$get_chunk_return
     #get_chunk 62  8; devmajor=$get_chunk_return
     #get_chunk 70  8; devmajor=$get_chunk_return
@@ -123,7 +131,7 @@ get_one_file () {
 
     # only handle files and directories leaving a bunch of types 
     # that are just begging for implementation.  Their cries have
-    # fallen on deaf ears
+    # fallen on deaf ears, devices... hm?  hardlinks?  symlinks?
     # is it linkcount or filesize that indicates hard links?  
 
     #TODO: check for last field and return 1
@@ -137,11 +145,13 @@ get_one_file () {
        8)
             extract_file $namesize $fname $filesize ;;
        4)
-            extract_dir ;;
+            extract_dir $fname ;;
+       *)
+            echo "Unsupported filetype: $filetype   for $fname"
     esac
     
     #giant PITA getting this padding right.
-    #header + name + padding
+    #header + name + padding AND math in bash is a chore
     sb=$(( 110 + $namesize ))
     sb=$(( $sb + (( 4 - ( $sb % 4 )) % 4 ) ))
 
