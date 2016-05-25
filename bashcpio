@@ -9,12 +9,33 @@ declare -i fileperm
 declare -i filetype
 declare -i mtime
 declare pkg
+declare tmpfile
 
 cmd_line () {
-    pkg=$1
-    if [ "$pkg" = "" -o ! -e "$pkg" ]; then
-        echo "no package supplied" 1>&2
-        exit 1
+    local warn=0
+    while (( "$#" )); do
+        if [[ "$1" = "-"* ]] && [ $warn -eq 0 ]; then
+            warn=1
+            echo "Commandline options not supported.  operating in -idvu mode"
+            echo " In other words, extract into directories, overwrite, and print names"
+            echo " Usage:  bashcpio < archive "
+            echo "         rpm2cpio.sh foo.rpm | bashcpio"
+            echo "         bashcpio archive"
+        else 
+            pkg=$1
+        fi
+        shift
+    done
+
+    if [ x"$pkg" = "x" ]; then
+         pkg=./bashcpio.tmp.$RANDOM
+         tmpfile="x"
+         dd > $pkg  2>/dev/null
+    fi
+
+    if [ ! -r $pkg ]; then
+        echo "No such file: $pkg"
+        exit
     fi
 }
 
@@ -174,4 +195,8 @@ until [ $fin = 1 ]; do
     get_one_file
     fin=$?
 done
+
+if [ -n "$tmpfile" ]; then
+    rm -f $pkg
+fi
 

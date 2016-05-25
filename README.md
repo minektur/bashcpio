@@ -53,3 +53,6 @@ local access and good timing might get a file overwritten or perms-changed.
 You should probably unpack in an area that only you have write-access to 
 
 * You can get a copy of rpm2cpio.sh (GPL'd) here: https://github.com/rpm-software-management/rpm/tree/master/scripts
+
+*    TODO:  add gpl license info for my modified rpm2cpio.sh
+*    TODO:  support symlinks, hardlinks, device files, fifos, and uh... 
