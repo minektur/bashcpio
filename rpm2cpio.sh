@@ -1,7 +1,7 @@
 #!/bin/bash
 #on chromeos /bin/sh is different than /bin/bash
 
-Taken from: https://github.com/rpm-software-management/rpm/tree/master/scripts
+#Taken from: https://github.com/rpm-software-management/rpm/tree/master/scripts
 
 # Prevent gawk >= 4.0.x from getting funny ideas wrt UTF in printf()
 LANG=C
