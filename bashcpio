@@ -14,7 +14,7 @@ declare tmpfile
 # parse command line, make temp file from input stream if no package given
 #  since we can only operate on real files.  Print usage if user gives 
 #  any command line args
-cmd_line () {
+function cmd_line () {
     while (( "$#" )); do
         if [[ "$1" = "-"* ]];  then
             echo "Commandline options not supported.  operating in -idvu mode"
@@ -50,7 +50,7 @@ cmd_line () {
 #    note the use of the global current_base - points to the current file record
 #    so that this code can be used on any file in the archive
 declare get_chunk_return=""
-get_chunk () {
+function get_chunk () {
     local skp
     local siz
     local file
@@ -70,7 +70,7 @@ get_chunk () {
 # extractor for a file in an archive
 # extract_file(namesize, fname, flength )
 #     saves the current file, sets perms, uid,gid ,mtime, if possible
-extract_file () {
+function extract_file () {
     local sb
     local dir
     local namesize
@@ -110,7 +110,7 @@ extract_file () {
 # extractor for a directory in an archive
 # extract_dir( $dirname )
 #  extracts directory and sets perms, uid, gid, mtime if possible
-extract_dir () {
+function extract_dir () {
     dirname="$1"
     mkdir -p "$dirname"
     #only works if running as root - silently ignore errors
@@ -128,7 +128,7 @@ extract_dir () {
 
 # read header of current record using fixed offsets
 #   set a bunch of global variables
-read_header () {
+function read_header () {
     #grab what should be the whole header (not including variable filename)
     get_chunk 0   110; rec=$get_chunk_return
 
@@ -187,7 +187,7 @@ read_header () {
 }
 
 #verifies that we read a supported record type
-check_magic () {
+function check_magic () {
     if [ "$magic" != "070701" ] && [ "$magic" != "070702" ] ; then
         echo "Invalid header - not a cpio archive?"
         echo "$magic"
@@ -198,7 +198,7 @@ check_magic () {
 
 # everything to extract a file out of a cpio archive
 #  as pointed at by $current_base
-get_one_file () {
+function get_one_file () {
     local sb
 
     read_header 
@@ -240,7 +240,7 @@ get_one_file () {
 }
 
 
-cleanup () {
+function cleanup () {
     if [ -n "$tmpfile" ]; then
         rm -f "$pkg"
     fi
