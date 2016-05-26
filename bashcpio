@@ -11,28 +11,32 @@ declare -i mtime
 declare pkg
 declare tmpfile
 
+# parse command line, make temp file from input stream if no package given
+#  since we can only operate on real files.  Print usage if user gives 
+#  any command line args
 cmd_line () {
-    local warn=0
     while (( "$#" )); do
-        if [[ "$1" = "-"* ]] && [ $warn -eq 0 ]; then
-            warn=1
+        if [[ "$1" = "-"* ]];  then
             echo "Commandline options not supported.  operating in -idvu mode"
             echo " In other words, extract into directories, overwrite, and print names"
             echo " Usage:  bashcpio < archive "
             echo "         rpm2cpio.sh foo.rpm | bashcpio"
             echo "         bashcpio archive"
+            exit 1
         else 
             pkg=$1
         fi
         shift
     done
 
+    # remember that we made temp file so we can remove it at exit later
     if [ x"$pkg" = "x" ]; then
          pkg=./bashcpio.tmp.$RANDOM
          tmpfile="x"
          dd > $pkg  2>/dev/null
     fi
 
+    # does it exist and can we read it?
     if [ ! -r $pkg ]; then
         echo "No such file: $pkg"
         exit
@@ -53,7 +57,9 @@ get_chunk () {
     declare -i skp=$1+$current_base
     siz=$2
     file=$3
-    if [ "$3"x != 'x' ]; then
+
+    # write to file if specified, else write to stdout 
+    if [ x"$3" != "x" ]; then
         file=" of=$3 "
     else
         file=""
@@ -61,8 +67,9 @@ get_chunk () {
     get_chunk_return=`dd if="$pkg" count=$siz skip=$skp $file iflag=count_bytes,skip_bytes 2>/dev/null`
 }
 
+# extractor for a file in an archive
 # extract_file(namesize, fname, flength )
-#     saves the current file, sets perms, owners?
+#     saves the current file, sets perms, uid,gid ,mtime, if possible
 extract_file () {
     local sb
     local dir
@@ -87,44 +94,90 @@ extract_file () {
     #TODO: umask on dir creation?
     mkdir -p $dir
     echo "x: $fname"
+
     #TODO: chroot here maybe, or some sanitization of path name 
-    # remove leading slashes and dots until first non-slash/dot?
     get_chunk $sb $flength $fname
+
     #only works if running as root - silently ignore errors
     chown $uid:$gid $fname > /dev/null 2>&1
     chmod $fileperm $fname 
     
+    #convert epoch time to yyyymmddhhmm.ss for touch TODO: timezone?
     ds=$( date -d @$mtime +%Y%m%d%H%M.%S )
     touch -c -m -t $ds $fname
 }
 
+# extractor for a directory in an archive
+# extract_dir( $dirname )
+#  extracts directory and sets perms, uid, gid, mtime if possible
 extract_dir () {
     dirname=$1
     mkdir -p $dirname
     #only works if running as root - silently ignore errors
     chown $uid:$gid $dirname > /dev/null 2>&1
     chmod $fileperm $dirname
+
+    #convert epoch time to yyyymmddhhmm.ss for touch TODO: timezone?
+    # may not be worth doing - writing a file to this dir later will
+    # update mtime - only makes a difference if this comes after all
+    # files that go inside it in the archive.
+
+    ds=$( date -d @$mtime +%Y%m%d%H%M.%S )
+    touch -c -m -t $ds $dirname
 }
 
 # read header of current record using fixed offsets
 #   set a bunch of global variables
 read_header () {
-    # dont bother getting header fields we dont need
-    get_chunk 0   6; magic=$get_chunk_return
+    #grab what should be the whole header (not including variable filename)
+    get_chunk 0   110; rec=$get_chunk_return
+
+
+    # validate magic immediately to minimize the possiblity of wierd failure 
+    # with non-ascii content
+    magic=${rec:0:6}
     check_magic
-    #get_chunk 6   8; ino=$get_chunk_return
-    get_chunk 14  8; mode=$get_chunk_return
-    get_chunk 22  8; uid=$get_chunk_return
-    get_chunk 30  8; gid=$get_chunk_return
-    #get_chunk 38  8; nlink=$get_chunk_return
-    get_chunk 46  8; mtime=0x$get_chunk_return
-    get_chunk 54  8; filesize=0x$get_chunk_return
-    #get_chunk 62  8; devmajor=$get_chunk_return
-    #get_chunk 70  8; devmajor=$get_chunk_return
-    #get_chunk 78  8; rdevminor=$get_chunk_return
-    #get_chunk 86  8; rdevminor=$get_chunk_return
-    get_chunk 94  8;  namesize=0x$get_chunk_return
-    #get_chunk 102 8; check=$get_chunk_return
+
+    ino2=${rec:6:8}
+    mode=${rec:14:8}
+    uid=${rec:22:8}
+    gid=${rec:30:8}
+    nlink=${rec:38:8}
+    mtime=0x${rec:46:8}
+    filesize=0x${rec:54:8}
+    devmajor=${rec:62:8}
+    devminor=${rec:70:8}
+    rdevmajor=${rec:78:8}
+    rdevminor=${rec:86:8}
+    namesize=0x${rec:94:8}
+    check=${rec:102:8}
+
+
+    # the old slow way - may switch back if substrings prove less robust in
+    #  the face of weird input about 50% slower
+ 
+    # dont bother getting header fields we dont need
+    #get_chunk 0   6; magic=$get_chunk_return
+    # validate magic immediately to minimize the possiblity of wierd failure with 
+    # non-ascii content
+    check_magic
+
+    ##get_chunk 6   8; ino=$get_chunk_return
+    #get_chunk 14  8; mode=$get_chunk_return
+    #get_chunk 22  8; uid=$get_chunk_return
+    #get_chunk 30  8; gid=$get_chunk_return
+    ##get_chunk 38  8; nlink=$get_chunk_return
+    #get_chunk 46  8; mtime=0x$get_chunk_return
+    #get_chunk 54  8; filesize=0x$get_chunk_return
+    ##get_chunk 62  8; devmajor=$get_chunk_return
+    ##get_chunk 70  8; devmajor=$get_chunk_return
+    ##get_chunk 78  8; rdevminor=$get_chunk_return
+    ##get_chunk 86  8; rdevminor=$get_chunk_return
+    #get_chunk 94  8;  namesize=0x$get_chunk_return
+    ##get_chunk 102 8; check=$get_chunk_return
+
+
+
     get_chunk 110 $namesize; fname=$get_chunk_return
 
     #mask and convert to octal
@@ -152,10 +205,7 @@ get_one_file () {
 
     # only handle files and directories leaving a bunch of types 
     # that are just begging for implementation.  Their cries have
-    # fallen on deaf ears, devices... hm?  hardlinks?  symlinks?
-    # is it linkcount or filesize that indicates hard links?  
-
-    #TODO: check for last field and return 1
+    # fallen on deaf ears, devices?  hardlinks?  symlinks? fifos?
 
     if  [ $fname = 'TRAILER!!!' ]; then
         #end of archive
@@ -168,8 +218,10 @@ get_one_file () {
        4)
             extract_dir $fname ;;
        *)
+            #should this be a fatal error?
             echo "Unsupported filetype: $filetype   for $fname"
     esac
+
     
     #giant PITA getting this padding right.
     #header + name + padding AND math in bash is a chore
@@ -186,8 +238,17 @@ get_one_file () {
 }
 
 
+cleanup () {
+    if [ -n "$tmpfile" ]; then
+        rm -f $pkg
+    fi
+}
 
 
+
+
+
+trap cleanup EXIT
 cmd_line $1
 
 fin=0;
@@ -196,7 +257,4 @@ until [ $fin = 1 ]; do
     fin=$?
 done
 
-if [ -n "$tmpfile" ]; then
-    rm -f $pkg
-fi
 
