@@ -24,7 +24,7 @@ cmd_line () {
             echo "         bashcpio archive"
             exit 1
         else 
-            pkg=$1
+            pkg="$1"
         fi
         shift
     done
@@ -37,7 +37,7 @@ cmd_line () {
     fi
 
     # does it exist and can we read it?
-    if [ ! -r $pkg ]; then
+    if [ ! -r "$pkg" ]; then
         echo "No such file: $pkg"
         exit
     fi
@@ -54,9 +54,9 @@ get_chunk () {
     local skp
     local siz
     local file
-    declare -i skp=$1+$current_base
-    siz=$2
-    file=$3
+    declare -i skp="$1"+"$current_base"
+    siz="$2"
+    file="$3"
 
     # write to file if specified, else write to stdout 
     if [ x"$3" != "x" ]; then
@@ -92,30 +92,30 @@ extract_file () {
     #   using only builtins... maybe
     dir=`dirname $fname`
     #TODO: umask on dir creation?
-    mkdir -p $dir
+    mkdir -p "$dir"
     echo "x: $fname"
 
     #TODO: chroot here maybe, or some sanitization of path name 
-    get_chunk $sb $flength $fname
+    get_chunk "$sb" "$flength" "$fname"
 
     #only works if running as root - silently ignore errors
-    chown $uid:$gid $fname > /dev/null 2>&1
-    chmod $fileperm $fname 
+    chown "$uid":"$gid" "$fname" > /dev/null 2>&1
+    chmod "$fileperm" "$fname" 
     
     #convert epoch time to yyyymmddhhmm.ss for touch TODO: timezone?
     ds=$( date -d @$mtime +%Y%m%d%H%M.%S )
-    touch -c -m -t $ds $fname
+    touch -c -m -t "$ds" "$fname"
 }
 
 # extractor for a directory in an archive
 # extract_dir( $dirname )
 #  extracts directory and sets perms, uid, gid, mtime if possible
 extract_dir () {
-    dirname=$1
-    mkdir -p $dirname
+    dirname="$1"
+    mkdir -p "$dirname"
     #only works if running as root - silently ignore errors
-    chown $uid:$gid $dirname > /dev/null 2>&1
-    chmod $fileperm $dirname
+    chown "$uid":"$gid" "$dirname" > /dev/null 2>&1
+    chmod "$fileperm" "$dirname"
 
     #convert epoch time to yyyymmddhhmm.ss for touch TODO: timezone?
     # may not be worth doing - writing a file to this dir later will
@@ -123,7 +123,7 @@ extract_dir () {
     # files that go inside it in the archive.
 
     ds=$( date -d @$mtime +%Y%m%d%H%M.%S )
-    touch -c -m -t $ds $dirname
+    touch -c -m -t "$ds" "$dirname"
 }
 
 # read header of current record using fixed offsets
@@ -135,22 +135,22 @@ read_header () {
 
     # validate magic immediately to minimize the possiblity of wierd failure 
     # with non-ascii content
-    magic=${rec:0:6}
+    magic="${rec:0:6}"
     check_magic
 
-    ino2=${rec:6:8}
-    mode=${rec:14:8}
-    uid=${rec:22:8}
-    gid=${rec:30:8}
-    nlink=${rec:38:8}
-    mtime=0x${rec:46:8}
-    filesize=0x${rec:54:8}
-    devmajor=${rec:62:8}
-    devminor=${rec:70:8}
-    rdevmajor=${rec:78:8}
-    rdevminor=${rec:86:8}
-    namesize=0x${rec:94:8}
-    check=${rec:102:8}
+    ino2="${rec:6:8}"
+    mode="${rec:14:8}"
+    uid="${rec:22:8}"
+    gid="${rec:30:8}"
+    nlink="${rec:38:8}"
+    mtime="0x${rec:46:8}"
+    filesize="0x${rec:54:8}"
+    devmajor="${rec:62:8}"
+    devminor="${rec:70:8}"
+    rdevmajor="${rec:78:8}"
+    rdevminor="${rec:86:8}"
+    namesize="0x${rec:94:8}"
+    check="${rec:102:8}"
 
 
     # the old slow way - may switch back if substrings prove less robust in
@@ -190,7 +190,7 @@ read_header () {
 check_magic () {
     if [ "$magic" != "070701" ] && [ "$magic" != "070702" ] ; then
         echo "Invalid header - not a cpio archive?"
-        echo $magic
+        echo "$magic"
         exit 1
     fi
     return 0
@@ -212,11 +212,11 @@ get_one_file () {
         return 1
     fi
 
-    case $filetype in
+    case "$filetype" in
        8)
-            extract_file $namesize $fname $filesize ;;
+            extract_file "$namesize" "$fname" "$filesize" ;;
        4)
-            extract_dir $fname ;;
+            extract_dir "$fname" ;;
        *)
             #should this be a fatal error?
             echo "Unsupported filetype: $filetype   for $fname"
@@ -232,7 +232,7 @@ get_one_file () {
     sb=$(( $sb + $filesize ))
     sb=$(( $sb + (( 4 - ( $sb % 4 )) % 4 ) ))
   
-    current_base=$current_base+$sb
+    current_base="$current_base"+"$sb"
     
     return 0
 }
@@ -240,7 +240,7 @@ get_one_file () {
 
 cleanup () {
     if [ -n "$tmpfile" ]; then
-        rm -f $pkg
+        rm -f "$pkg"
     fi
 }
 
@@ -249,12 +249,12 @@ cleanup () {
 
 
 trap cleanup EXIT
-cmd_line $1
+cmd_line "$1"
 
 fin=0;
-until [ $fin = 1 ]; do
+until [ "$fin" = 1 ]; do
     get_one_file
-    fin=$?
+    fin="$?"
 done
 
 
