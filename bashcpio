@@ -64,20 +64,13 @@ function parent_dir () {
 }
 
 
-# extract_file namesize, fname, flength 
-# TODO: refactor - why do I pass 3 params and use globals for the rest?
+# extract_file namesize
 # extractor for a file in an archive
 #     saves the current file, sets perms, uid,gid ,mtime, if possible
 function extract_file () {
     local sb
     local dir
-    local namesize
-    local fname
-    local flength
     local ds
-    namesize=$1
-    fname=$2
-    flength=$3
 
     #sb bytes (skipped) will now get us to beginning of file contents
     # header size = 13*8  + 6  + filenamesize (including 1 null byte)
@@ -86,8 +79,6 @@ function extract_file () {
     sb=$(( $sb + (( 4 - ( $sb % 4 )) % 4 ) ))
 
     parent_dir 
-
-    echo "x: $fname"
 
     if [ "$nlink" -gt 1 ]; then
         #first one? save so we can link the others to it
@@ -99,7 +90,7 @@ function extract_file () {
     fi
 
     #TODO: chroot here maybe, or some sanitization of path name 
-    get_chunk "$sb" "$flength" "$fname"
+    get_chunk "$sb" "$filesize" "$fname"
 
     #only works if running as root - silently ignore errors
     chown "$uid":"$gid" "$fname" > /dev/null 2>&1
@@ -111,15 +102,13 @@ function extract_file () {
 }
 
 # extractor for a directory in an archive
-# extract_dir( $dir )
+# extract_dir
 #  extracts directory and sets perms, uid, gid, mtime if possible
-# TODO:  why pass dir but not others?  just use globals
 function extract_dir () {
-    dir="$1"
-    mkdir -p "$dir"
+    mkdir -p "$fname"
     #only works if running as root - silently ignore errors
-    chown "$uid":"$gid" "$dir" > /dev/null 2>&1
-    chmod "$fileperm" "$dir"
+    chown "$uid":"$gid" "$fname" > /dev/null 2>&1
+    chmod "$fileperm" "$fname"
 
     #convert epoch time to yyyymmddhhmm.ss for touch TODO: timezone?
     # may not be worth doing - writing a file to this dir later will
@@ -234,11 +223,13 @@ function get_one_file () {
     # only handle files, directories, symlinks and hardlinks 
     # devices?  fifos?
 
+    echo "x: $fname"
+
     case "$filetype" in
        8)
-            extract_file "$namesize" "$fname" "$filesize" ;;
+            extract_file ;;
        4)
-            extract_dir "$fname" ;;
+            extract_dir ;;
        10)  
             extract_symlink ;;
        *)
