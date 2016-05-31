@@ -63,6 +63,19 @@ function parent_dir () {
     fi
 }
 
+# fixup_atts
+# set mode, owner group mtime on file
+function fixup_atts () {
+
+    #only works if running as root - silently ignore errors
+    chown -f -h "$uid":"$gid" "$fname" 
+    chmod -f "$fileperm" "$fname" 
+    
+    #convert epoch time to yyyymmddhhmm.ss for touch 
+    ds=$( date -d @$mtime +%Y%m%d%H%M.%S )
+    touch -h -c -m -t "$ds" "$fname"
+
+}
 
 # extract_file namesize
 # extractor for a file in an archive
@@ -85,20 +98,13 @@ function extract_file () {
         if [ x"${hardlinks[$ino]}" = "x" ]; then
             hardlinks[$ino]=$fname
         else
-            ln ${hardlinks[$ino]} $fname 
+            ln -r -f ${hardlinks[$ino]} $fname 
         fi
     fi
 
     #TODO: chroot here maybe, or some sanitization of path name 
     get_chunk "$sb" "$filesize" "$fname"
-
-    #only works if running as root - silently ignore errors
-    chown "$uid":"$gid" "$fname" > /dev/null 2>&1
-    chmod "$fileperm" "$fname" 
-    
-    #convert epoch time to yyyymmddhhmm.ss for touch 
-    ds=$( date -d @$mtime +%Y%m%d%H%M.%S )
-    touch -c -m -t "$ds" "$fname"
+    fixup_atts
 }
 
 # extractor for a directory in an archive
@@ -106,18 +112,13 @@ function extract_file () {
 #  extracts directory and sets perms, uid, gid, mtime if possible
 function extract_dir () {
     mkdir -p "$fname"
-    #only works if running as root - silently ignore errors
-    chown "$uid":"$gid" "$fname" > /dev/null 2>&1
-    chmod "$fileperm" "$fname"
+    fixup_atts
 
-    #convert epoch time to yyyymmddhhmm.ss for touch TODO: timezone?
-    # may not be worth doing - writing a file to this dir later will
-    # update mtime - only makes a difference if this comes after all
-    # files that go inside it in the archive.
-    # TODO queue up dir-mtime settings and do at the very end
-
-    ds=$( date -d @$mtime +%Y%m%d%H%M.%S )
-    touch -c -m -t "$ds" "$dir"
+    # unless the creator of the archive put the directory entry last
+    # in the archive, unpacking files into the dir will update mtime.
+    # To do this right, you need to save directory mtime settings
+    # and do them from the leaves up.
+    # TODO queue up dir-mtime settings and order them right.  ugh
 }
 
 #symlink has target in contents
@@ -133,9 +134,8 @@ function extract_symlink () {
     get_chunk "$sb" "$filesize"
  
     parent_dir   
-    ln -s "$get_chunk_return" "$fname"
-    #TODO ownership and perms on actual link itself
-
+    ln -r -f -s "$get_chunk_return" "$fname"
+    fixup_atts
 }
 
 
