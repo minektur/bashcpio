@@ -1,4 +1,5 @@
 #!/bin/bash
+# Copyright 2016 Fred Clift.  See accompanying LICENSE file for details.
 
 #pointer to beginning of current file to be extracted
 declare -i current_base=0
@@ -10,6 +11,7 @@ declare -i filetype
 declare -i mtime
 declare pkg
 declare tmpfile
+declare -A hardlinks
 
 # parse command line, make temp file from input stream if no package given
 #  since we can only operate on real files.  Print usage if user gives 
@@ -44,6 +46,141 @@ function cmd_line () {
 }
 
 
+# add_link 123 "/abc/def"
+# stash the path of a hardlink, indexed by inode for later creation
+# (ab)use an associative array to fake a hash of lists
+#  each inode has an entry hardlinks["123"] that is a count of the 
+#  number of list elemnts it has and then hardlinks["123_N"] where
+#  n is an integer is one of the entries.  fun, and tedious to type. 
+function add_link () {
+    local ino
+    local path
+    ino="$1"
+    path="$2" 
+
+    #stashing first one
+    if [ ${hardlinks["$ino"]}x = "x" ]; then
+        hardlinks["$ino"]=0  
+    fi
+    
+    #increase count and index
+    hardlinks["$ino"]=$(( ${hardlinks["$ino"]} + 1 ))
+
+    local bucket="$ino""_""${hardlinks["$ino"]}"
+    hardlinks["$bucket"]=$path
+}
+
+# get_linknames "$inode"
+# for a given inode "return" a simple array with each of the
+#  links pointing to that file (in the global created to hold
+#  the return value)
+declare -a get_linknames_return
+function get_linknames () {
+    local ino="$1"
+    local count=${hardlinks[$ino]}
+
+    get_linknames_return=()
+    # no such inode listed, return empty array
+    if [ "x$count" = "x" ]; then
+        return
+    fi
+
+    #loop not very efficient for large number of entries
+    while [ $count -gt 0 ]; do
+        get_linknames_return[$count]=${hardlinks["$ino""_""$count"]}
+        count=$(( $count - 1 ))
+    done
+}
+    
+
+# extract_file namesize, fname, flength 
+# TODO: refactor - why do I pass 3 params and use globals for the rest?
+# extractor for a file in an archive
+#     saves the current file, sets perms, uid,gid ,mtime, if possible
+function extract_file () {
+    local sb
+    local dir
+    local namesize
+    local fname
+    local flength
+    local ds
+    namesize=$1
+    fname=$2
+    flength=$3
+
+    #sb bytes (skipped) will now get us to beginning of file contents
+    # header size = 13*8  + 6  + filenamesize (including 1 null byte)
+    #  + null padding to make the whole thing be a multiple of 4
+    sb=$(( 110 + $namesize ))
+    sb=$(( $sb + (( 4 - ( $sb % 4 )) % 4 ) ))
+
+    # TODO replace dirname with something stupid and complicated later
+    #   using only builtins... maybe
+    dir=`dirname $fname`
+    #TODO: umask on dir creation?
+    mkdir -p "$dir"
+    echo "x: $fname"
+
+    if [ "$nlink" -gt 1 ]; then
+        #first one? save so we can link the others to it
+        if [ x"${hardlinks[$ino]}" = "x" ]; then
+            hardlinks[$ino]=$fname
+        else
+            ln ${hardlinks[$ino]} $fname 
+        fi
+    fi
+
+    #TODO: chroot here maybe, or some sanitization of path name 
+    get_chunk "$sb" "$flength" "$fname"
+
+    #only works if running as root - silently ignore errors
+    chown "$uid":"$gid" "$fname" > /dev/null 2>&1
+    chmod "$fileperm" "$fname" 
+    
+    #convert epoch time to yyyymmddhhmm.ss for touch 
+    ds=$( date -d @$mtime +%Y%m%d%H%M.%S )
+    touch -c -m -t "$ds" "$fname"
+}
+
+# extractor for a directory in an archive
+# extract_dir( $dirname )
+#  extracts directory and sets perms, uid, gid, mtime if possible
+# TODO:  why pass dirname but not others?  just use globals
+function extract_dir () {
+    dirname="$1"
+    mkdir -p "$dirname"
+    #only works if running as root - silently ignore errors
+    chown "$uid":"$gid" "$dirname" > /dev/null 2>&1
+    chmod "$fileperm" "$dirname"
+
+    #convert epoch time to yyyymmddhhmm.ss for touch TODO: timezone?
+    # may not be worth doing - writing a file to this dir later will
+    # update mtime - only makes a difference if this comes after all
+    # files that go inside it in the archive.
+    # TODO queue up dir-mtime settings and do at the very end
+
+    ds=$( date -d @$mtime +%Y%m%d%H%M.%S )
+    touch -c -m -t "$ds" "$dirname"
+}
+
+#symlink has target in contents
+function extract_symlink () {
+    local sb
+
+    #sb bytes (skipped) will now get us to beginning of file contents
+    # header size = 13*8  + 6  + filenamesize (including 1 null byte)
+    #  + null padding to make the whole thing be a multiple of 4
+    sb=$(( 110 + $namesize ))
+    sb=$(( $sb + (( 4 - ( $sb % 4 )) % 4 ) ))
+
+    get_chunk "$sb" "$flength"
+    
+    ln -s "$get_chunk_return" "$fname"
+    #TODO ownership and perms on actual link itself
+
+}
+
+
 # get_chunk(skipbytes, chunklen, [savefile])
 #    return value in get_chunk_return or saved into savefile
 #    if savefile is specified
@@ -67,64 +204,7 @@ function get_chunk () {
     get_chunk_return=`dd if="$pkg" count=$siz skip=$skp $file iflag=count_bytes,skip_bytes 2>/dev/null`
 }
 
-# extractor for a file in an archive
-# extract_file(namesize, fname, flength )
-#     saves the current file, sets perms, uid,gid ,mtime, if possible
-function extract_file () {
-    local sb
-    local dir
-    local namesize
-    local fname
-    local flength
-    local ds
-    namesize=$1
-    fname=$2
-    flength=$3
 
-    #sb bytes (skipped) will now get us to beginning of file contents
-    # header size = 13*8  + 6  + filenamesize (including 1 null byte)
-    #  + null padding to make the whole thing be a multiple of 4
-    sb=$(( 110 + $namesize ))
-    sb=$(( $sb + (( 4 - ( $sb % 4 )) % 4 ) ))
-
-
-    # TODO replace dirname with something stupid and complicated later
-    #   using only builtins... maybe
-    dir=`dirname $fname`
-    #TODO: umask on dir creation?
-    mkdir -p "$dir"
-    echo "x: $fname"
-
-    #TODO: chroot here maybe, or some sanitization of path name 
-    get_chunk "$sb" "$flength" "$fname"
-
-    #only works if running as root - silently ignore errors
-    chown "$uid":"$gid" "$fname" > /dev/null 2>&1
-    chmod "$fileperm" "$fname" 
-    
-    #convert epoch time to yyyymmddhhmm.ss for touch TODO: timezone?
-    ds=$( date -d @$mtime +%Y%m%d%H%M.%S )
-    touch -c -m -t "$ds" "$fname"
-}
-
-# extractor for a directory in an archive
-# extract_dir( $dirname )
-#  extracts directory and sets perms, uid, gid, mtime if possible
-function extract_dir () {
-    dirname="$1"
-    mkdir -p "$dirname"
-    #only works if running as root - silently ignore errors
-    chown "$uid":"$gid" "$dirname" > /dev/null 2>&1
-    chmod "$fileperm" "$dirname"
-
-    #convert epoch time to yyyymmddhhmm.ss for touch TODO: timezone?
-    # may not be worth doing - writing a file to this dir later will
-    # update mtime - only makes a difference if this comes after all
-    # files that go inside it in the archive.
-
-    ds=$( date -d @$mtime +%Y%m%d%H%M.%S )
-    touch -c -m -t "$ds" "$dirname"
-}
 
 # read header of current record using fixed offsets
 #   set a bunch of global variables
@@ -132,13 +212,12 @@ function read_header () {
     #grab what should be the whole header (not including variable filename)
     get_chunk 0   110; rec=$get_chunk_return
 
-
     # validate magic immediately to minimize the possiblity of wierd failure 
     # with non-ascii content
     magic="${rec:0:6}"
     check_magic
 
-    ino2="${rec:6:8}"
+    ino="${rec:6:8}"
     mode="${rec:14:8}"
     uid="${rec:22:8}"
     gid="${rec:30:8}"
@@ -151,31 +230,6 @@ function read_header () {
     rdevminor="${rec:86:8}"
     namesize="0x${rec:94:8}"
     check="${rec:102:8}"
-
-
-    # the old slow way - may switch back if substrings prove less robust in
-    #  the face of weird input about 50% slower
- 
-    # dont bother getting header fields we dont need
-    #get_chunk 0   6; magic=$get_chunk_return
-    # validate magic immediately to minimize the possiblity of wierd failure with 
-    # non-ascii content
-    check_magic
-
-    ##get_chunk 6   8; ino=$get_chunk_return
-    #get_chunk 14  8; mode=$get_chunk_return
-    #get_chunk 22  8; uid=$get_chunk_return
-    #get_chunk 30  8; gid=$get_chunk_return
-    ##get_chunk 38  8; nlink=$get_chunk_return
-    #get_chunk 46  8; mtime=0x$get_chunk_return
-    #get_chunk 54  8; filesize=0x$get_chunk_return
-    ##get_chunk 62  8; devmajor=$get_chunk_return
-    ##get_chunk 70  8; devmajor=$get_chunk_return
-    ##get_chunk 78  8; rdevminor=$get_chunk_return
-    ##get_chunk 86  8; rdevminor=$get_chunk_return
-    #get_chunk 94  8;  namesize=0x$get_chunk_return
-    ##get_chunk 102 8; check=$get_chunk_return
-
 
 
     get_chunk 110 $namesize; fname=$get_chunk_return
@@ -203,22 +257,21 @@ function get_one_file () {
 
     read_header 
 
-    # only handle files and directories leaving a bunch of types 
-    # that are just begging for implementation.  Their cries have
-    # fallen on deaf ears, devices?  hardlinks?  symlinks? fifos?
-
     if  [ $fname = 'TRAILER!!!' ]; then
         #end of archive
         return 1
     fi
+
+    # only handle files, directories, symlinks and hardlinks 
+    # devices?  fifos?
 
     case "$filetype" in
        8)
             extract_file "$namesize" "$fname" "$filesize" ;;
        4)
             extract_dir "$fname" ;;
-       10)  echo "HARDLINK? $fname"
-            ;;
+       10)  
+            extract_symlink ;;
        *)
             #should this be a fatal error?
             echo "Unsupported filetype: $filetype   for $fname"
@@ -247,9 +300,6 @@ function cleanup () {
 }
 
 
-
-
-
 trap cleanup EXIT
 cmd_line "$1"
 
@@ -258,5 +308,9 @@ until [ "$fin" = 1 ]; do
     get_one_file
     fin="$?"
 done
+
+
+
+
 
 
