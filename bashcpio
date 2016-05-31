@@ -56,7 +56,7 @@ function parent_dir () {
     #   using only builtins... maybe
     dir=`dirname $fname`
 
-    #TODO: ownerhsip of parent dirs not specified in archive? undefined in cpio spec?
+    # TODO: ownerhsip of parent dirs not specified in archive? undefined in cpio spec?
     # its a little faster to [ ! -d $dir ] than to let mkdir -p fail silently  
     if [ ! -d "$dir" ]; then
         mkdir -p "$dir"
@@ -117,7 +117,7 @@ function extract_file () {
         fi
     fi
 
-    #TODO: chroot here maybe, or some sanitization of path name 
+    # TODO: chroot here maybe, or some sanitization of path name 
     get_chunk "$sb" "$filesize" "$fname"
     fixup_atts
 }
@@ -143,6 +143,7 @@ function extract_symlink () {
     #sb bytes (skipped) will now get us to beginning of file contents
     # header size = 13*8  + 6  + filenamesize (including 1 null byte)
     #  + null padding to make the whole thing be a multiple of 4
+
     padding 110 $namesize
     sb=$padding_return
 
