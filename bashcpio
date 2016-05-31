@@ -77,19 +77,34 @@ function fixup_atts () {
 
 }
 
+# padding insize
+#  giant PITA getting this padding right. math in bash is a chore
+declare padding_return=""
+function padding () {
+    local base=$1 
+    local insize=$2 
+    local sb
+
+    sb=$(( $base + $insize ))
+    sb=$(( $sb + (( 4 - ( $sb % 4 )) % 4 ) ))
+
+    padding_return=$sb
+}
+
 # extract_file namesize
 # extractor for a file in an archive
 #     saves the current file, sets perms, uid,gid ,mtime, if possible
 function extract_file () {
-    local sb
+    local sb 
     local dir
     local ds
 
     #sb bytes (skipped) will now get us to beginning of file contents
     # header size = 13*8  + 6  + filenamesize (including 1 null byte)
     #  + null padding to make the whole thing be a multiple of 4
-    sb=$(( 110 + $namesize ))
-    sb=$(( $sb + (( 4 - ( $sb % 4 )) % 4 ) ))
+
+    padding 110 $namesize
+    sb=$padding_return
 
     parent_dir 
 
@@ -128,8 +143,8 @@ function extract_symlink () {
     #sb bytes (skipped) will now get us to beginning of file contents
     # header size = 13*8  + 6  + filenamesize (including 1 null byte)
     #  + null padding to make the whole thing be a multiple of 4
-    sb=$(( 110 + $namesize ))
-    sb=$(( $sb + (( 4 - ( $sb % 4 )) % 4 ) ))
+    padding 110 $namesize
+    sb=$padding_return
 
     get_chunk "$sb" "$filesize"
  
@@ -237,15 +252,13 @@ function get_one_file () {
             echo "Unsupported filetype: $filetype   for $fname"
     esac
 
-    
-    #giant PITA getting this padding right.
-    #header + name + padding AND math in bash is a chore
-    sb=$(( 110 + $namesize ))
-    sb=$(( $sb + (( 4 - ( $sb % 4 )) % 4 ) ))
+    #header + filename + padding
+    padding 110 $namesize 
+    sb=$padding_return
 
     # + file payload + padding
-    sb=$(( $sb + $filesize ))
-    sb=$(( $sb + (( 4 - ( $sb % 4 )) % 4 ) ))
+    padding $sb $filesize
+    sb=$padding_return
   
     current_base="$current_base"+"$sb"
     
