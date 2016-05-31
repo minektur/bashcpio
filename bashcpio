@@ -1,17 +1,21 @@
 #!/bin/bash
 # Copyright 2016 Fred Clift.  See accompanying LICENSE file for details.
 
+umask 0022
+
 #pointer to beginning of current file to be extracted
 declare -i current_base=0
+
+declare pkg
+declare tmpfile
+declare -A hardlinks
+
 #some other (integer) globals 
 declare -i filesize
 declare -i namesize
 declare -i fileperm
 declare -i filetype
 declare -i mtime
-declare pkg
-declare tmpfile
-declare -A hardlinks
 
 # parse command line, make temp file from input stream if no package given
 #  since we can only operate on real files.  Print usage if user gives 
@@ -50,7 +54,8 @@ function parent_dir () {
     # TODO replace dirname with something stupid and complicated later
     #   using only builtins... maybe
     dir=`dirname $fname`
-    #TODO: umask on dir creation? ownerhsip of parent dirs not specified in archive?
+    #TODO:  is it faster for mkdir -p to fail silently, or to [ ! -d $dir ]  ?
+    #TODO: ownerhsip of parent dirs not specified in archive?
     mkdir -p "$dir"
 }
 
