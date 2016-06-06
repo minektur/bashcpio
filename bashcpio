@@ -70,8 +70,6 @@ function bdirname () {
 # parent_dir
 # makes parent directory (if needed) for current fname
 function parent_dir () {
-    # TODO replace dirname with something stupid and complicated later
-    #   using only builtins... maybe
     dir=$( bdirname "$fname" )
 
     # TODO: ownerhsip of parent dirs not specified in archive? undefined in cpio spec?
