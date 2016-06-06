@@ -36,7 +36,7 @@ function cmd_line () {
     done
 
     # remember that we made temp file so we can remove it at exit later
-    if [ x"$pkg" = "x" ]; then
+    if [ -z "$pkg" ]; then
          pkg=./bashcpio.tmp.$RANDOM
          tmpfile="x"
          dd > $pkg  2>/dev/null
@@ -49,12 +49,30 @@ function cmd_line () {
     fi
 }
 
+# bdirname 
+# returns the dirname of a dirname/path string
+# replacement for C binary
+# thanks to /u/LukeShu on Reddit for this code
+function bdirname () {
+    local file=$1
+    local dir
+    if [[ "$file" = */* ]]; then
+        dir="${file%/*}"
+        if [ -z "dir" ]; then
+            dir=/
+        fi
+    else
+        dir=.
+    fi
+    printf '%s\n' "$dir"
+}
+
 # parent_dir
 # makes parent directory (if needed) for current fname
 function parent_dir () {
     # TODO replace dirname with something stupid and complicated later
     #   using only builtins... maybe
-    dir=$( dirname "$fname" )
+    dir=$( bdirname "$fname" )
 
     # TODO: ownerhsip of parent dirs not specified in archive? undefined in cpio spec?
     # its a little faster to [ ! -d $dir ] than to let mkdir -p fail silently  
@@ -111,7 +129,7 @@ function extract_file () {
 
     if [ "$nlink" -gt 1 ]; then
         #first one? save so we can link the others to it
-        if [ x"${hardlinks[$ino]}" = "x" ]; then
+        if [ -z "${hardlinks[$ino]}" ]; then
             hardlinks[$ino]=$fname
         else
             ln -f "${hardlinks[$ino]}" "$fname" 
@@ -171,7 +189,7 @@ function get_chunk () {
     siz="$2"
 
     # write to file if specified, else write to stdout 
-    if [ x"$3" != "x" ]; then
+    if [ -n "$3" ]; then
         file="of=""$3"
     else
         file=""
