@@ -1,7 +1,7 @@
 # bashcpio
 An incomplete cpio extractor in bash.
 
-# external dependencies:  dd, mkdir, dirname, chown, chmod, date, touch, ln
+# external dependencies:  dd, mkdir, dirname, chown, chmod, touch, ln
  (could probably get rid of dirname, but the rest have no pure-bash equivalent)
 
 The goal of this project is to implement enough of cpio extraction that 

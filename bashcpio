@@ -72,7 +72,8 @@ function fixup_atts () {
     chmod -f "$fileperm" "$fname" 
     
     #convert epoch time to yyyymmddhhmm.ss for touch 
-    ds=$( date -d @$mtime +%Y%m%d%H%M.%S )
+    # thanks to /u/geihra on reddit - got rid of external date command
+    printf -v ds '%(%Y%m%d%H%M.%S)T' "$mtime"
     touch -h -c -m -t "$ds" "$fname"
 
 }
@@ -113,7 +114,7 @@ function extract_file () {
         if [ x"${hardlinks[$ino]}" = "x" ]; then
             hardlinks[$ino]=$fname
         else
-            ln -r -f ${hardlinks[$ino]} $fname 
+            ln -f ${hardlinks[$ino]} $fname 
         fi
     fi
 
@@ -150,7 +151,7 @@ function extract_symlink () {
     get_chunk "$sb" "$filesize"
  
     parent_dir   
-    ln -r -f -s "$get_chunk_return" "$fname"
+    ln -f -s "$get_chunk_return" "$fname"
     fixup_atts
 }
 
