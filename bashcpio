@@ -54,7 +54,7 @@ function cmd_line () {
 function parent_dir () {
     # TODO replace dirname with something stupid and complicated later
     #   using only builtins... maybe
-    dir=`dirname $fname`
+    dir=$( dirname "$fname" )
 
     # TODO: ownerhsip of parent dirs not specified in archive? undefined in cpio spec?
     # its a little faster to [ ! -d $dir ] than to let mkdir -p fail silently  
@@ -86,10 +86,10 @@ function padding () {
     local insize=$2 
     local sb
 
-    sb=$(( $base + $insize ))
-    sb=$(( $sb + (( 4 - ( $sb % 4 )) % 4 ) ))
+    sb=$(( base + insize ))
+    sb=$(( sb + (( 4 - ( sb % 4 )) % 4 ) ))
 
-    padding_return=$sb
+    padding_return="$sb"
 }
 
 # extract_file namesize
@@ -104,8 +104,8 @@ function extract_file () {
     # header size = 13*8  + 6  + filenamesize (including 1 null byte)
     #  + null padding to make the whole thing be a multiple of 4
 
-    padding 110 $namesize
-    sb=$padding_return
+    padding 110 "$namesize"
+    sb="$padding_return"
 
     parent_dir 
 
@@ -114,7 +114,7 @@ function extract_file () {
         if [ x"${hardlinks[$ino]}" = "x" ]; then
             hardlinks[$ino]=$fname
         else
-            ln -f ${hardlinks[$ino]} $fname 
+            ln -f "${hardlinks[$ino]}" "$fname" 
         fi
     fi
 
@@ -145,8 +145,8 @@ function extract_symlink () {
     # header size = 13*8  + 6  + filenamesize (including 1 null byte)
     #  + null padding to make the whole thing be a multiple of 4
 
-    padding 110 $namesize
-    sb=$padding_return
+    padding 110 "$namesize"
+    sb="$padding_return"
 
     get_chunk "$sb" "$filesize"
  
@@ -166,17 +166,19 @@ function get_chunk () {
     local skp
     local siz
     local file
+    local cmd
     declare -i skp="$1"+"$current_base"
     siz="$2"
-    file="$3"
 
     # write to file if specified, else write to stdout 
     if [ x"$3" != "x" ]; then
-        file=" of=$3 "
+        file="of=""$3"
     else
         file=""
     fi
-    get_chunk_return=`dd if="$pkg" count=$siz skip=$skp $file iflag=count_bytes,skip_bytes 2>/dev/null`
+
+    printf -v cmd "dd if=%s count=%s skip=%s %s iflag=count_bytes,skip_bytes"  "$pkg" "$siz" "$skp" "$file" 
+    get_chunk_return=$( $cmd 2>/dev/null )
 }
 
 
@@ -185,7 +187,7 @@ function get_chunk () {
 #   set a bunch of global variables
 function read_header () {
     #grab what should be the whole header (not including variable filename)
-    get_chunk 0   110; rec=$get_chunk_return
+    get_chunk 0   110; rec="$get_chunk_return"
 
     # validate magic immediately to minimize the possiblity of wierd failure 
     # with non-ascii content
@@ -199,15 +201,15 @@ function read_header () {
     nlink="${rec:38:8}"
     mtime="0x${rec:46:8}"
     filesize="0x${rec:54:8}"
-    devmajor="${rec:62:8}"
-    devminor="${rec:70:8}"
-    rdevmajor="${rec:78:8}"
-    rdevminor="${rec:86:8}"
+    #devmajor="${rec:62:8}"
+    #devminor="${rec:70:8}"
+    #rdevmajor="${rec:78:8}"
+    #rdevminor="${rec:86:8}"
     namesize="0x${rec:94:8}"
-    check="${rec:102:8}"
+    #check="${rec:102:8}"
 
 
-    get_chunk 110 $namesize; fname=$get_chunk_return
+    get_chunk 110 "$namesize"; fname="$get_chunk_return"
 
     #mask and convert to octal
     fileperm=$(printf "%o" "0x${mode:5}")
@@ -232,7 +234,7 @@ function get_one_file () {
 
     read_header 
 
-    if  [ $fname = 'TRAILER!!!' ]; then
+    if  [ "$fname" = 'TRAILER!!!' ]; then
         #end of archive
         return 1
     fi
@@ -255,12 +257,12 @@ function get_one_file () {
     esac
 
     #header + filename + padding
-    padding 110 $namesize 
-    sb=$padding_return
+    padding 110 "$namesize" 
+    sb="$padding_return"
 
     # + file payload + padding
-    padding $sb $filesize
-    sb=$padding_return
+    padding "$sb" "$filesize"
+    sb="$padding_return"
   
     current_base="$current_base"+"$sb"
     
