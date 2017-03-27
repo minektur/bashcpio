@@ -58,7 +58,7 @@ function bdirname () {
     local dir
     if [[ "$file" = */* ]]; then
         dir="${file%/*}"
-        if [ -z "dir" ]; then
+        if [ -z "$dir" ]; then
             dir=/
         fi
     else
